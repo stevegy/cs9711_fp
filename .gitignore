@@ -16,3 +16,6 @@ Module.symvers
 # Generated / local outputs
 compile_commands.json
 out.pgm
+
+# draw.io desktop temp backups
+.$*
