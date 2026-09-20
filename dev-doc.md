@@ -86,7 +86,7 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
 
 ## 6. Risks / Decisions
 
-- **No kernel module**: a USB bulk fingerprint sensor needs no kernel privileges. Earlier in the project a `cs9711.ko` char driver was developed (`driver/`), but it is deliberately not built, loaded, or documented further — it would conflict with libusb and add kernel-update rebuild burden.
+- **No kernel module**: a USB bulk fingerprint sensor needs no kernel privileges. Earlier in the project a `cs9711.ko` char driver was developed; its sources (then in `driver/`) were removed from the repo (git history) once the userspace design was chosen — it would conflict with libusb and add kernel-update rebuild burden.
 - **Frame format**: tools expose the raw 8024-byte sensor frame; the 68×118 upscale stays in libfprint/userspace.
 - **No blind RE needed** — protocol confirmed by the reference driver, validated by `cs9711_libusb`.
 
