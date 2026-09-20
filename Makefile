@@ -18,3 +18,9 @@ clean:
 # Build libfprint with the CS9711 driver integrated (see dev-log.md, Phase 1)
 libfprint:
 	bash tools/build_libfprint.sh
+
+.PHONY: compdb
+
+# Regenerate compile_commands.json for clangd/Zed (see tools/gen_userspace_compdb.py)
+compdb:
+	python3 tools/gen_userspace_compdb.py .
