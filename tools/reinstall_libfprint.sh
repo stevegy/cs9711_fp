@@ -36,15 +36,31 @@ for arg in "$@"; do
 done
 
 # 1. Rebuild — fast path: only the changed TU(s) are recompiled and relinked.
+#    The meson source tree is a copy (see build_libfprint.sh), so refresh our
+#    driver files into it first; otherwise ninja thinks there is no work to do.
+DRIV="build/src-libfprint/libfprint/drivers"
+if [ ! -f "$DRIV/cs9711.c" ]; then
+    echo "build tree missing $DRIV/cs9711.c — run: bash tools/build_libfprint.sh" >&2
+    exit 1
+fi
 if [ "$do_build" = 1 ]; then
+    if ! cmp -s driver/libfprint-cs9711/cs9711.c "$DRIV/cs9711.c" \
+       || ! cmp -s driver/libfprint-cs9711/cs9711.h "$DRIV/cs9711.h"; then
+        cp driver/libfprint-cs9711/cs9711.c driver/libfprint-cs9711/cs9711.h "$DRIV/"
+    fi
     ninja -C build/fpbuild \
         || { echo "build failed (first-time setup needs: bash tools/build_libfprint.sh)" >&2; exit 1; }
 fi
 
 [ -f "$ART" ]  || { echo "artifact missing: $ART" >&2; exit 1; }
 [ -f "$META" ] || { echo "metainfo missing: $META" >&2; exit 1; }
-strings "$ART" | grep -q cs9711 \
-    || { echo "cs9711 driver not linked into $ART — run: bash tools/build_libfprint.sh" >&2; exit 1; }
+# SIGPIPE quirk: `grep -q` exits as soon as it finds a match, which kills
+# `strings` mid-write (exit 141), and under `set -o pipefail` the whole
+# pipeline reports failure even though the check passed. Count instead.
+if [ "$(strings "$ART" | grep -c cs9711 || true)" -eq 0 ]; then
+    echo "cs9711 driver not linked into $ART — run: bash tools/build_libfprint.sh" >&2
+    exit 1
+fi
 
 SUDO=""
 [ "$(id -u)" = "0" ] || SUDO="sudo"

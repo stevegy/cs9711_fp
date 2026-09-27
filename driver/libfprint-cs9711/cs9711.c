@@ -1,5 +1,5 @@
 /*
- * Chipsailing CS9711Fingprint driver
+ * Chipsailing CS9711 Fingerprint driver
  *
  * Modified based on driver vfs301* so keeping original notice:
  *
@@ -448,7 +448,7 @@ fpi_device_cs9711_class_init (FpDeviceCs9711Class *klass)
   g_assert ((CS9711_FRAME_SIZE) == (CS9711_FP_RECV_LEN_1 + CS9711_FP_RECV_LEN_2));
 
   dev_class->id = "cs9711";
-  dev_class->full_name = "Chipsailing CS9711Fingprint";
+  dev_class->full_name = "Chipsailing CS9711 Fingerprint";
   dev_class->type = FP_DEVICE_TYPE_USB;
   dev_class->id_table = id_table;
   dev_class->scan_type = FP_SCAN_TYPE_PRESS;
