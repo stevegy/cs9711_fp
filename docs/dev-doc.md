@@ -95,3 +95,89 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
 - `cs9711_libusb` produces a recognizable fingerprint PGM (`out.pgm`).
 - `fprintd-enroll` stores a template; `fprintd-verify` matches the enrolled finger and rejects others.
 - Login works via `pam_fprintd` — no `/dev/cs9711` involved.
+
+## Everything's verified. Here's the complete build → enable → test/debug loop as of today's state.
+
+## Current state (verified just now)
+
+| Item | State |
+|---|---|
+| Driver source | `driver/libfprint-cs9711/cs9711.c` — compiled **in-tree into `libfprint-2.so`** (not a standalone module) |
+| Build artifact | ✅ current, driver linked in (`strings …libfprint-2.so.2.0.0 \| grep -c cs9711` → 17), metainfo generated at `build/fpbuild/libfprint/org.freedesktop.libfprint.metainfo.xml` |
+| System library | ❌ still stock Fedora (`/usr/lib64/libfprint-2.so.2.0.0`, 0 cs9711 refs) → **fprintd cannot see the reader until the Phase 2 install** |
+| Hardware | no CS9711 (2541:*) in `lsusb` right now — you'll need the reader plugged in for live tests |
+
+## 1. Build loop
+
+```bash
+cd ~/works/cs9711_fp
+
+# Fast inner loop (what you want 95% of the time): recompile just cs9711.c, relink the .so
+ninja -C build/fpbuild
+
+# Full/idempotent rebuild (re-runs SRPM/extract/meson-setup only if missing; no network needed now)
+make libfprint        # = bash tools/build_libfprint.sh
+```
+
+Post-build sanity (same checks as Phase 1):
+```bash
+strings build/fpbuild/libfprint/libfprint-2.so.2.0.0 | grep -c cs9711          # expect ≥1
+diff <(nm -D --defined-only /usr/lib64/libfprint-2.so.2.0.0) \
+     <(nm -D --defined-only build/fpbuild/libfprint/libfprint-2.so.2.0.0)       # exported API must be identical (ABI match with fprintd/pam_fprintd)
+```
+
+Your **editor loop is already wired**: `make compdb` reuses the meson flags for this exact TU, so Zed/clangd gives you instant diagnostics while typing; `ninja` is the authority that links.
+
+## 2. Enable — one-time install (Phase 2, needs sudo)
+
+Per your dev-log plan (backup → swap `.so` + metainfo → verify):
+
+```bash
+cd ~/works/cs9711_fp
+sudo mkdir -p build/backup-$(date +%F)
+sudo cp /usr/lib64/libfprint-2.so.2.0.0 \
+        /usr/share/metainfo/org.freedesktop.libfprint.metainfo.xml \
+        build/backup-$(date +%F)/
+
+sudo install -m 755 build/fpbuild/libfprint/libfprint-2.so.2.0.0 /usr/lib64/libfprint-2.so.2.0.0
+sudo cp build/fpbuild/libfprint/org.freedesktop.libfprint.metainfo.xml /usr/share/metainfo/
+
+# verify + restart (fprintd.service is a SYSTEM unit on this box)
+sudo systemctl restart fprintd
+fprintd-list        # should now list the CS9711 device when plugged in
+```
+
+Rollback = copy the two files back from `build/backup-*/`. The metainfo install is what adds the `usb:v2541p9711*`/`usb:v2541p0236*` modalias so fprintd enumerates your reader (confirmed in Phase 1).
+
+## 3. Test/debug loop (each iteration after the one-time install)
+
+```
+edit cs9711.c (Zed, live clangd)
+  → ninja -C build/fpbuild
+  → sudo cp build/fpbuild/libfprint/libfprint-2.so.2.0.0 /usr/lib64/   (metainfo only once)
+  → sudo systemctl restart fprintd
+  → test
+```
+
+**Functional tests** (user at the reader):
+- `fprintd-list` — device visible? templates present?
+- `fprintd-enroll` — 15 finger placements (`nr_enroll_stages = 15`)
+- `fprintd-verify` / negative test with another finger
+- Regression: `make && ./tools/cs9711_libusb` still captures a PGM non-root
+
+**Logs & driver-level debugging:**
+```bash
+journalctl -u fprintd -f                    # daemon + driver log lines
+# driver's fp_dbg() calls go through g_debug under domain "cs9711" — to see them:
+sudo systemctl edit fprintd                 # add:
+#   [Service]
+#   Environment="G_MESSAGES_DEBUG=cs9711"
+```
+
+**Deeper debug:** the .so is built with default `debugoptimized` (has `-g`), so after installing your build you can attach live:
+```bash
+gdb -p $(sudo systemctl show -p MainPID --value fprintd)
+(gdb) b m_scan_state            # or dev_open / m_scan_read_cb_bulk / m_scan_submit_image
+```
+
+**Bisection trick:** if something fails, run `./tools/cs9711_libusb` — it speaks the same protocol (INIT/RESET/SCAN, 8000+24 B) with zero libfprint in between. If the tool works but fprintd's path doesn't, the bug is in your driver's SSM/callback layer, not the wire protocol.
