@@ -29,8 +29,6 @@ docs/                     design/dev docs and session logs
 - Fedora 44 (x86_64) with `libfprint` + `fprintd` installed
   (`libfprint-1.94.100-1.fc44`, `fprintd-1.94.5-5.fc44` at time of writing)
 - `meson`, `ninja` (plus the normal libfprint build deps)
-- Network via `source ~/proxy.env` only for the first fetch in
-  `build_libfprint.sh` (the SRPM is then cached under `build/srpm/`)
 
 ## Build & install
 
